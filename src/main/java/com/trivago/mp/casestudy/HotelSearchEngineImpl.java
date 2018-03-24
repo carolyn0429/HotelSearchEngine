@@ -19,16 +19,17 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
 
     @Override
     public void initialize() {
-
         hotelsCsvReader();
         advertiserCsvReader();
         citiesCsvReader();
         advertiseHotelMapCsvReader();
         hotelAdvertiseMapCsvReader();
         cityHotelMapCsvReader();
-
     }
 
+    /**
+     * create hotel_advertise map
+     */
     private void hotelAdvertiseMapCsvReader() {
         BufferedReader reader;
         try {
@@ -53,6 +54,9 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
         }
     }
 
+    /**
+     * create city_hotel map
+     */
     private void cityHotelMapCsvReader() {
 
         for(int i=0; i<hotels.size(); i++){
@@ -68,6 +72,9 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
 
     }
 
+    /**
+     * create advertise_hotel map
+     */
     private void advertiseHotelMapCsvReader() {
         BufferedReader reader;
         try {
@@ -93,6 +100,9 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
         }
     }
 
+    /**
+     * create cities list
+     */
     private void citiesCsvReader() {
         BufferedReader reader;
         try {
@@ -110,6 +120,9 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
         }
     }
 
+    /**
+     * create advertisers list
+     */
     private void advertiserCsvReader() {
         BufferedReader reader;
         try {
@@ -128,6 +141,9 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
         }
     }
 
+    /**
+     * create hotels list
+     */
     private void hotelsCsvReader() {
         BufferedReader reader;
         try {
@@ -149,28 +165,22 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
         }
     }
 
+    /**
+     *
+     * @param cityName given city name
+     * @param dateRange given date range
+     * @param offerProvider offer provider interface to call finding offer per advertiser
+     * @return list of hotel with offers
+     */
     @Override
     public List<HotelWithOffers> performSearch(String cityName, DateRange dateRange, OfferProvider offerProvider) {
 
         List<HotelWithOffers> hotelsWithOffers = new ArrayList<>();
-        Map<Integer, List<Integer>> updatedHotelAdvertiseMap = updateHotelAdvertiseMapByCity(cityName);
-        Map<Integer, List<Integer>> updatedAdvertiseHotelMap = new HashMap<>();
-        for (Map.Entry<Integer, List<Integer>> entry : updatedHotelAdvertiseMap.entrySet()){
-            Integer hotelId = entry.getKey();
-            List<Integer> listOfAdvertisers = entry.getValue();
-            for(int i=0; i<listOfAdvertisers.size(); i++){
-                if (updatedAdvertiseHotelMap.containsKey(listOfAdvertisers.get(i))){
-                    List<Integer> currentAdvList = updatedAdvertiseHotelMap.get(listOfAdvertisers.get(i));
-                    currentAdvList.add(hotelId);
-                    updatedAdvertiseHotelMap.put(listOfAdvertisers.get(i), currentAdvList);
-                } else {
-                    updatedAdvertiseHotelMap.put(listOfAdvertisers.get(i), new ArrayList<>(Arrays.asList(hotelId)));
-                }
-            }
 
-        }
+        // update advertise_hotel map based on city name
+        Map<Integer, List<Integer>> updatedAdvertiseHotelMap = updateAdvertiseHotelMap(cityName);
 
-
+        // perform search with filtered advertise_hotel map to reduce expensive call times.
         for (Map.Entry<Integer, List<Integer>> entry : updatedAdvertiseHotelMap.entrySet()){
             Integer key = entry.getKey();
             List<Integer> hotelIds = entry.getValue();
@@ -190,7 +200,6 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
                     List<Offer> existingOffers = new ArrayList<>(hotelsWithOffers.get(index).getOffers());
                     existingOffers.add(offer);
 
-
                 } else {
                     // initialize new HotelWithOffers for this hotelId.
                     HotelWithOffers hotelWithOffers = new HotelWithOffers(hotels.get(hotelId));
@@ -198,20 +207,52 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
                     hotelWithOffers.setOffers(Arrays.asList(offer));
                     hotelsWithOffers.add(hotelWithOffers);
                 }
-
             }
-
         }
-
         return hotelsWithOffers;
     }
 
+    /**
+     * find hotel with offers within existing list of hotels with offers
+     * @param hotelsWithOffers list of existing hotels with offers
+     * @param hotelId hotel id
+     * @return HotelWithOffers hotel offers with given hotelId
+     */
     private HotelWithOffers findHotelWithOffersInHotelsWithOffers(List<HotelWithOffers> hotelsWithOffers, int hotelId) {
 
         return hotelsWithOffers.stream().filter(hotelWithOffers -> (hotelId == hotelWithOffers.getHotel().getId()))
                 .findFirst().orElse(null);
     }
 
+    /**
+     * update advertise hotel map filtered by given city name
+     * @param cityName city name
+     * @return updated advertise_hotel map
+     */
+    private Map<Integer, List<Integer>> updateAdvertiseHotelMap(String cityName) {
+        Map<Integer, List<Integer>> updatedHotelAdvertiseMap = updateHotelAdvertiseMapByCity(cityName);
+        Map<Integer, List<Integer>> updatedAdvertiseHotelMap = new HashMap<>();
+        for (Map.Entry<Integer, List<Integer>> entry : updatedHotelAdvertiseMap.entrySet()){
+            Integer hotelId = entry.getKey();
+            List<Integer> listOfAdvertisers = entry.getValue();
+            for(int i=0; i<listOfAdvertisers.size(); i++){
+                if (updatedAdvertiseHotelMap.containsKey(listOfAdvertisers.get(i))){
+                    List<Integer> currentAdvList = updatedAdvertiseHotelMap.get(listOfAdvertisers.get(i));
+                    currentAdvList.add(hotelId);
+                    updatedAdvertiseHotelMap.put(listOfAdvertisers.get(i), currentAdvList);
+                } else {
+                    updatedAdvertiseHotelMap.put(listOfAdvertisers.get(i), new ArrayList<>(Arrays.asList(hotelId)));
+                }
+            }
+        }
+        return updatedAdvertiseHotelMap;
+    }
+
+    /**
+     * update hotel_advertise map filtered by given city name
+     * @param cityName city name
+     * @return updated hotel_advertise map
+     */
     private HashMap<Integer, List<Integer>> updateHotelAdvertiseMapByCity(String cityName) {
 
         int cityId = cityMap.get(cityName);
