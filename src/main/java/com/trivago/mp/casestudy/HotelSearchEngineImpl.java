@@ -1,12 +1,8 @@
 package com.trivago.mp.casestudy;
 
-
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 /**
  * TODO: Implement this class.
@@ -16,9 +12,10 @@ import java.util.List;
 public class HotelSearchEngineImpl implements HotelSearchEngine {
     private List<HotelOfCity> hotels = new ArrayList<>();
     private List<Advertiser> advertisers = new ArrayList<>();
-    private HashMap<String, Integer> cityMap = new HashMap<>();
-    private HashMap<Integer, List<Integer>> advertiseHotelMap = new HashMap<>();
-    private HashMap<Integer, List<Integer>> cityHotelMap = new HashMap<>();
+    private Map<String, Integer> cityMap = new HashMap<>();
+    private Map<Integer, List<Integer>> advertiseHotelMap = new HashMap<>();
+    private Map<Integer, List<Integer>> hotelAdvertiseMap = new HashMap<>();
+    private Map<Integer, List<Integer>> cityHotelMap = new HashMap<>();
 
     @Override
     public void initialize() {
@@ -27,8 +24,33 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
         advertiserCsvReader();
         citiesCsvReader();
         advertiseHotelMapCsvReader();
+        hotelAdvertiseMapCsvReader();
         cityHotelMapCsvReader();
 
+    }
+
+    private void hotelAdvertiseMapCsvReader() {
+        BufferedReader reader;
+        try {
+            reader = new BufferedReader(new FileReader("data/hotel_advertiser.csv"));
+            String line = "";
+            reader.readLine();
+            while((line = reader.readLine()) != null){
+                String[] dataList = line.split(",");
+                if(dataList.length > 0) {
+                    if (hotelAdvertiseMap.containsKey(Integer.valueOf(dataList[1]))){
+                        List<Integer> currentAdvertiseList = hotelAdvertiseMap.get(Integer.valueOf(dataList[1]));
+                        currentAdvertiseList.add(Integer.valueOf(dataList[0]));
+                        List<Integer> newAdvertiseList = new ArrayList<>(currentAdvertiseList);
+                        hotelAdvertiseMap.put(Integer.valueOf(dataList[1]), newAdvertiseList);
+                    } else {
+                        hotelAdvertiseMap.put(Integer.valueOf(dataList[1]), new ArrayList<>(Arrays.asList(Integer.valueOf(dataList[0]))));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void cityHotelMapCsvReader() {
@@ -40,7 +62,7 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
                 List<Integer> newHotelList = new ArrayList<>(currentHotelList);
                 cityHotelMap.put(hotels.get(i).getCityId(), newHotelList);
             } else {
-                cityHotelMap.put(hotels.get(i).getCityId(), Arrays.asList(i));
+                cityHotelMap.put(hotels.get(i).getCityId(), new ArrayList<>(Arrays.asList(i)));
             }
         }
 
@@ -49,6 +71,7 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
     private void advertiseHotelMapCsvReader() {
         BufferedReader reader;
         try {
+            // advertiser id, hotel id
             reader = new BufferedReader(new FileReader("data/hotel_advertiser.csv"));
             String line = "";
             reader.readLine();
@@ -57,11 +80,11 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
                 if(dataList.length > 0) {
                     if (advertiseHotelMap.containsKey(Integer.valueOf(dataList[0]))){
                         List<Integer> currentHotelList = advertiseHotelMap.get(Integer.valueOf(dataList[0]));
-                        currentHotelList.add(Integer.valueOf(dataList[1]));
+                        currentHotelList.add(new Integer(Integer.valueOf(dataList[1])));
                         List<Integer> newHotelList = new ArrayList<>(currentHotelList);
                         advertiseHotelMap.put(Integer.valueOf(dataList[0]), newHotelList);
                     } else {
-                        advertiseHotelMap.put(Integer.valueOf(dataList[0]), Arrays.asList(Integer.valueOf(dataList[1])));
+                        advertiseHotelMap.put(Integer.valueOf(dataList[0]), new ArrayList<>(Arrays.asList(Integer.parseInt(dataList[1]))));
                     }
                 }
             }
@@ -130,24 +153,73 @@ public class HotelSearchEngineImpl implements HotelSearchEngine {
     public List<HotelWithOffers> performSearch(String cityName, DateRange dateRange, OfferProvider offerProvider) {
 
         List<HotelWithOffers> hotelsWithOffers = new ArrayList<>();
-        HashMap<Integer, Integer> updatedAdvHotelMap = updateAdvertiseHotelMapByCity(cityName);
-        for (int i=0; i<advertisers.size(); i++) {
-            if (advertiseHotelMap.get(i).size() > 0){
-                //offerProvider.getOffersFromAdvertiser(advertisers.get(i), ,dateRange)
+        Map<Integer, List<Integer>> updatedHotelAdvertiseMap = updateHotelAdvertiseMapByCity(cityName);
+        Map<Integer, List<Integer>> updatedAdvertiseHotelMap = new HashMap<>();
+        for (Map.Entry<Integer, List<Integer>> entry : updatedHotelAdvertiseMap.entrySet()){
+            Integer hotelId = entry.getKey();
+            List<Integer> listOfAdvertisers = entry.getValue();
+            for(int i=0; i<listOfAdvertisers.size(); i++){
+                if (updatedAdvertiseHotelMap.containsKey(listOfAdvertisers.get(i))){
+                    List<Integer> currentAdvList = updatedAdvertiseHotelMap.get(listOfAdvertisers.get(i));
+                    currentAdvList.add(hotelId);
+                    updatedAdvertiseHotelMap.put(listOfAdvertisers.get(i), currentAdvList);
+                } else {
+                    updatedAdvertiseHotelMap.put(listOfAdvertisers.get(i), new ArrayList<>(Arrays.asList(hotelId)));
+                }
             }
+
+        }
+
+
+        for (Map.Entry<Integer, List<Integer>> entry : updatedAdvertiseHotelMap.entrySet()){
+            Integer key = entry.getKey();
+            List<Integer> hotelIds = entry.getValue();
+
+            // Id is hotel id,
+            Map<Integer, Offer> offers = offerProvider.getOffersFromAdvertiser(advertisers.get(key), hotelIds, dateRange);
+
+            // convert offers to hotelWithOffers
+            for (Map.Entry<Integer, Offer> offerEntry : offers.entrySet()){
+                Integer hotelId = offerEntry.getKey();
+                Offer offer = offerEntry.getValue();
+
+                // if hotel is existed in offer list, take list out and add offer into existing offer list
+                if (findHotelWithOffersInHotelsWithOffers(hotelsWithOffers, hotelId) != null){
+                    HotelWithOffers existingHotelWithOffers = findHotelWithOffersInHotelsWithOffers(hotelsWithOffers, hotelId);
+                    int index = hotelsWithOffers.indexOf(existingHotelWithOffers);
+                    List<Offer> existingOffers = new ArrayList<>(hotelsWithOffers.get(index).getOffers());
+                    existingOffers.add(offer);
+
+
+                } else {
+                    // initialize new HotelWithOffers for this hotelId.
+                    HotelWithOffers hotelWithOffers = new HotelWithOffers(hotels.get(hotelId));
+                    // add initial offer as list
+                    hotelWithOffers.setOffers(Arrays.asList(offer));
+                    hotelsWithOffers.add(hotelWithOffers);
+                }
+
+            }
+
         }
 
         return hotelsWithOffers;
     }
 
-    private HashMap<Integer, Integer> updateAdvertiseHotelMapByCity(String cityName) {
-        HashMap<Integer, Integer> result = new HashMap<>();
+    private HotelWithOffers findHotelWithOffersInHotelsWithOffers(List<HotelWithOffers> hotelsWithOffers, int hotelId) {
+
+        return hotelsWithOffers.stream().filter(hotelWithOffers -> (hotelId == hotelWithOffers.getHotel().getId()))
+                .findFirst().orElse(null);
+    }
+
+    private HashMap<Integer, List<Integer>> updateHotelAdvertiseMapByCity(String cityName) {
+
         int cityId = cityMap.get(cityName);
         List<Integer> hotelIds = cityHotelMap.get(cityId);
-        for (int i=0; i<advertiseHotelMap.size(); i++){
-           // if (advertiseHotelMap.get(i)
+        HashMap<Integer, List<Integer>> updatedHotelAdvertiseMap = new HashMap<>();
+        for (int i=0; i<hotelIds.size(); i++){
+          updatedHotelAdvertiseMap.put(hotelIds.get(i), hotelAdvertiseMap.get(hotelIds.get(i)));
         }
-
-        return result;
+        return updatedHotelAdvertiseMap;
     }
 }
