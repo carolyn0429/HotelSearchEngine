@@ -5,9 +5,13 @@ import java.io.FileReader;
 import java.util.*;
 
 /**
- * TODO: Implement this class.
+ * Author: Carolyn Hung 3/22/2018
  * Your task will be to implement two functions, one for loading the data which is stored as .csv files in the ./data
  * folder and one for performing the actual search.
+ *
+ * ====Note====
+ * Improvement: perform ranking based on rating, city name, with given hotel stars range.
+ * Improvement: perform customer interest rate based on clicks, impression with given date range and city name.
  */
 public class HotelSearchEngineImpl implements HotelSearchEngine {
     private List<HotelOfCity> hotels = new ArrayList<>();
